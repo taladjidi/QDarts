@@ -81,7 +81,7 @@ def raster_CSD_states(
     line_start = simulation.find_state_of_voltage(
         v_0 + P @ np.array([minV[0], minV[1]]), state_hint_lower_right
     )
-    pbar = tqdm(total=np.prod(resolution), desc="Rastering CSD")
+    pbar = tqdm(total=np.prod(resolution), desc="Rasterizing CSD")
     # TODO: this is terrible in terms of performance
     for i, v1 in enumerate(np.linspace(minV[0], maxV[0], resolution[0])):
         state = line_start
