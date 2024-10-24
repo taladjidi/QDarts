@@ -168,9 +168,6 @@ def compute_polytope_slacks(A, b, bounds_A, bounds_b, maximum_slack):
 
     # now we know there is a polyope and we can compute its sides
     N = len(A)
-    touching = np.ones(
-        N, dtype=bool
-    )  # equations with eps~=0. At the beginning we assume all are touching
     slacks = (maximum_slack + 1) * np.ones(
         N
     )  # slack value (updated when equation is computed)
