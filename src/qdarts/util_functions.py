@@ -31,7 +31,7 @@ def is_invertible_matrix(A, max_cond=1.0e8):
 def solve_linear_problem(prob):
     """Internal helper function to solve supplied linear cvxpy problems"""
     try:
-        prob.solve(verbose=False, solver=cp.CLARABEL, max_iter=100000)
+        prob.solve(verbose=False, solver=cp.CLARABEL, max_iter=200, warm_start=True)
     except cp.SolverError:
         print("Solver error, trying GLPK")
         prob.solve(solver=cp.GLPK)
@@ -171,27 +171,54 @@ def compute_polytope_slacks(A, b, bounds_A, bounds_b, maximum_slack):
     slacks = (maximum_slack + 1) * np.ones(
         N
     )  # slack value (updated when equation is computed)
-    probs = []
+    # probs = []
+    # for k in range(N):
+    #     Ak = A[np.arange(N) != k, :]
+    #     bk = b[np.arange(N) != k]
+    #     # setup optimization problem
+    #     x = cp.Variable(A.shape[1])
+    #     eps = cp.Variable()
+    #     probs.append(
+    #         cp.Problem(
+    #             cp.Minimize(eps),
+    #             [A[k] @ x + b[k] + eps == 0, Ak @ x + bk <= 0, eps >= 0],
+    #         )
+    #     )
+    # # Now all k iterations are independent and can be solved in parallel. There is no significant
+    # # performance hit in not reducing the problem size by using the "touching" logic.
+    # # map(solve_linear_problem, probs)
+    # for k, prob in enumerate(probs):
+    #     solve_linear_problem(prob)
+    #     eps = prob.variables()[0]
+    #     if prob.status not in ["infeasible", "infeasible_inaccurate"]:
+    #         slacks[k] = eps.value
+    touching = np.ones(
+        N, dtype=bool
+    )  # equations with eps~=0. At the beginning we assume all are touching
+    slacks = (maximum_slack + 1) * np.ones(
+        N
+    )  # slack value (updated when equation is computed)
     for k in range(N):
-        Ak = A[np.arange(N) != k, :]
-        bk = b[np.arange(N) != k]
-        # setup optimization problem
+        # take all previous tested and verified touching eqs and all untested eqs, except the current
+        touching[k] = False
+        Ak = A[touching, :]
+        bk = b[touching]
+
+        # the current equation to test
+        A_eq = A[k]
+        b_eq = b[k]
+
+        # setup optimisation problem
         x = cp.Variable(A.shape[1])
         eps = cp.Variable()
-        probs.append(
-            cp.Problem(
-                cp.Minimize(eps),
-                [A[k] @ x + b[k] + eps == 0, Ak @ x + bk <= 0, eps >= 0],
-            )
+        prob = cp.Problem(
+            cp.Minimize(eps), [A_eq @ x + b_eq + eps == 0, Ak @ x + bk <= 0, eps >= 0]
         )
-    # Now all k iterations are independent and can be solved in parallel. There is no significant
-    # performance hit in not reducing the problem size by using the "touching" logic.
-    # TODO : use a parallel map here
-    for k, prob in enumerate(probs):
-        prob.solve(verbose=False, solver=cp.CLARABEL, max_iter=100000)
-        eps = prob.variables()[0]
+        solve_linear_problem(prob)
         if prob.status not in ["infeasible", "infeasible_inaccurate"]:
             slacks[k] = eps.value
+            if eps.value < 1.0e-6:
+                touching[k] = True
     return slacks
 
 
@@ -487,7 +514,7 @@ def compensate_simulator_sensors(
 
     # now create the P-matrix
     P = np.eye(simulator.num_inputs)
-    # get the indizes of the elements in the submatrix of the compensation parameters
+    # get the indices of the elements in the submatrix of the compensation parameters
     P_sub_ids = (
         simulator.num_inputs * compensation_gates[:, None] + other_gates[None, :]
     )
