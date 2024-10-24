@@ -2,6 +2,7 @@ import numpy as np
 from abc import ABCMeta, abstractmethod
 from qdarts.util_functions import find_label
 from qdarts.simulator import AbstractPolytopeSimulator
+from tqdm import tqdm
 
 
 def softmax(v, axis=None):
@@ -918,7 +919,7 @@ class ApproximateTunnelingSimulator(AbstractPolytopeSimulator):
 
         else:
             values = np.zeros((resolution[0], resolution[1], 1))
-
+        pbar = tqdm(desc="Generating sensor data", total=resolution[1])
         for i, v2 in enumerate(np.linspace(minV[1], maxV[1], resolution[1])):
             v_start = np.array([minV[0], v2])
             v_end = np.array([maxV[0], v2])
@@ -934,4 +935,5 @@ class ApproximateTunnelingSimulator(AbstractPolytopeSimulator):
                 start_new_measurement=False,
                 insitu_axis=insitu_axis,
             )  # changed cache to False?
+            pbar.update(1)
         return values
