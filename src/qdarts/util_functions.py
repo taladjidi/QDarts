@@ -33,6 +33,7 @@ def solve_linear_problem(prob):
     try:
         prob.solve(verbose=False, solver=cp.CLARABEL, max_iter=100000)
     except cp.SolverError:
+        print("Solver error, trying GLPK")
         prob.solve(solver=cp.GLPK)
 
 
@@ -173,27 +174,27 @@ def compute_polytope_slacks(A, b, bounds_A, bounds_b, maximum_slack):
     slacks = (maximum_slack + 1) * np.ones(
         N
     )  # slack value (updated when equation is computed)
+    probs = []
     for k in range(N):
-        # take all previous tested and verified touching eqs and all untested eqs, except the current
-        touching[k] = False
-        Ak = A[touching, :]
-        bk = b[touching]
-
-        # the current equation to test
-        A_eq = A[k]
-        b_eq = b[k]
-
-        # setup optimisation problem
+        Ak = A[np.arange(N) != k, :]
+        bk = b[np.arange(N) != k]
+        # setup optimization problem
         x = cp.Variable(A.shape[1])
         eps = cp.Variable()
-        prob = cp.Problem(
-            cp.Minimize(eps), [A_eq @ x + b_eq + eps == 0, Ak @ x + bk <= 0, eps >= 0]
+        probs.append(
+            cp.Problem(
+                cp.Minimize(eps),
+                [A[k] @ x + b[k] + eps == 0, Ak @ x + bk <= 0, eps >= 0],
+            )
         )
-        solve_linear_problem(prob)
+    # Now all k iterations are independent and can be solved in parallel. There is no significant
+    # performance hit in not reducing the problem size by using the "touching" logic.
+    # TODO : use a parallel map here
+    for k, prob in enumerate(probs):
+        prob.solve(verbose=False, solver=cp.CLARABEL, max_iter=100000)
+        eps = prob.variables()[0]
         if prob.status not in ["infeasible", "infeasible_inaccurate"]:
             slacks[k] = eps.value
-            if eps.value < 1.0e-6:
-                touching[k] = True
     return slacks
 
 
