@@ -171,3 +171,7 @@ class Cosine_Mean_Function(AbstractNoiseProcess):
         noise_values += mean.reshape(1, -1)
 
         return noise_values
+
+
+def norm_pdf(x, mu, var):
+    return 1 / np.sqrt(2 * np.pi * var) * np.exp(-((x - mu) ** 2) / (2 * var))

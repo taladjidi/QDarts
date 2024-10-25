@@ -3,6 +3,7 @@ from abc import ABCMeta, abstractmethod
 from qdarts.util_functions import find_label
 from qdarts.simulator import AbstractPolytopeSimulator
 from tqdm import tqdm
+from qdarts.noise_processes import norm_pdf
 
 
 def softmax(v, axis=None):
@@ -225,12 +226,6 @@ class NoisySensorDot(AbstractSensorSim):
             # we approximate the logistic peak of g with the peak of a normal distribution of same width
             # todo: we can fully go back to the logistic peak
             var_logistic = (1 / 0.631 * self.peak_width_multiplier) ** 2
-
-            def norm_pdf(x, mu, var):
-                return (
-                    1 / np.sqrt(2 * np.pi * var) * np.exp(-((x - mu) ** 2) / (2 * var))
-                )
-
             gs[sensor_id] = self.g_max * 4 * norm_pdf(0, eps, var_logistic)
         return gs
 
