@@ -211,7 +211,8 @@ class NoisySensorDot(AbstractSensorSim):
             slow_noise = self.slow_noise_gen(v)
         for i, sensor_id in enumerate(self.sensor_dot_ids):
             terms, neighbour_prev, neighbour_next, _ = sensor_state[sensor_id]
-
+            # TODO: Check if we need diag ? Should be able to do all the calculations
+            # with the H vectors ?
             # compute sensor detuning between every state and their neighbour
             eps_prev = np.abs(np.diag(H)[terms] - np.diag(H)[neighbour_prev])
             eps_next = np.abs(np.diag(H)[terms] - np.diag(H)[neighbour_next])

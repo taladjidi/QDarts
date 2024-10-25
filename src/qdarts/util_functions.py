@@ -1,6 +1,7 @@
 import cvxpy as cp
 import numpy as np
 from scipy.spatial import HalfspaceIntersection
+from tqdm import tqdm
 
 
 def is_sequence(seq):
@@ -31,7 +32,13 @@ def is_invertible_matrix(A, max_cond=1.0e8):
 def solve_linear_problem(prob):
     """Internal helper function to solve supplied linear cvxpy problems"""
     try:
-        prob.solve(verbose=False, solver=cp.CLARABEL, max_iter=200, warm_start=True)
+        prob.solve(
+            verbose=False,
+            solver=cp.CLARABEL,
+            max_iter=200,
+            warm_start=True,
+        )
+        # prob.solve(warm_start=True)
     except cp.SolverError:
         print("Solver error, trying GLPK")
         prob.solve(solver=cp.GLPK)
@@ -156,7 +163,7 @@ def compute_polytope_slacks(A, b, bounds_A, bounds_b, maximum_slack):
     # we return the vector of eps values for all equations so that the user can filter transitions afterwards
 
     # first special cases.
-    # only one constraint? feasible qwith slack 0
+    # only one constraint? feasible with slack 0
     if len(b) == 1:
         return np.zeros(1)
 
@@ -184,41 +191,60 @@ def compute_polytope_slacks(A, b, bounds_A, bounds_b, maximum_slack):
     #             [A[k] @ x + b[k] + eps == 0, Ak @ x + bk <= 0, eps >= 0],
     #         )
     #     )
-    # # Now all k iterations are independent and can be solved in parallel. There is no significant
-    # # performance hit in not reducing the problem size by using the "touching" logic.
-    # # map(solve_linear_problem, probs)
+    # pbar = tqdm(total=N, position=2, leave=False, desc="Computing slacks")
     # for k, prob in enumerate(probs):
     #     solve_linear_problem(prob)
     #     eps = prob.variables()[0]
     #     if prob.status not in ["infeasible", "infeasible_inaccurate"]:
     #         slacks[k] = eps.value
+    #     pbar.update(1)
+    # touching = np.ones(
+    #     N, dtype=bool
+    # )  # equations with eps~=0. At the beginning we assume all are touching
+    # # setup optimization problem
+    # x = cp.Variable(A.shape[1])
+    # eps = cp.Variable()
+    # pbar = tqdm(total=N, position=2, leave=False)
+    # for k in range(N):
+    #     # take all previous tested and verified touching eqs and all untested eqs, except the current
+    #     touching[k] = False
+    #     Ak = A[touching, :]  # matrix
+    #     bk = b[touching]  # vector
+    #     # the current equation to test
+    #     A_eq = A[k]  # vector
+    #     b_eq = b[k]  # scalar
+    #     prob = cp.Problem(
+    #         cp.Minimize(eps), [A_eq @ x + b_eq + eps == 0, Ak @ x + bk <= 0, eps >= 0]
+    #     )
+    #     solve_linear_problem(prob)
+    #     if prob.status not in ["infeasible", "infeasible_inaccurate"]:
+    #         slacks[k] = eps.value
+    #         if eps.value < 1.0e-6:
+    #             touching[k] = True
+    #     pbar.set_description(f"Computing slacks with {np.sum(touching)} equations")
+    #     pbar.update(1)
+    # setup optimization problem
     touching = np.ones(
         N, dtype=bool
     )  # equations with eps~=0. At the beginning we assume all are touching
-    slacks = (maximum_slack + 1) * np.ones(
-        N
-    )  # slack value (updated when equation is computed)
+    x = cp.Variable(A.shape)
+    eps = cp.Variable(N)
+    Ak = cp.Parameter((N, *A.shape))
+    bk = cp.Parameter(A.shape)
     for k in range(N):
         # take all previous tested and verified touching eqs and all untested eqs, except the current
-        touching[k] = False
-        Ak = A[touching, :]
-        bk = b[touching]
+        # touching[k] = False
+        Ak[k] = A[np.arange(N) != k, :]  # matrix
+        bk[k] = b[np.arange(N) != k]  # vector
 
-        # the current equation to test
-        A_eq = A[k]
-        b_eq = b[k]
-
-        # setup optimisation problem
-        x = cp.Variable(A.shape[1])
-        eps = cp.Variable()
-        prob = cp.Problem(
-            cp.Minimize(eps), [A_eq @ x + b_eq + eps == 0, Ak @ x + bk <= 0, eps >= 0]
-        )
-        solve_linear_problem(prob)
-        if prob.status not in ["infeasible", "infeasible_inaccurate"]:
-            slacks[k] = eps.value
-            if eps.value < 1.0e-6:
-                touching[k] = True
+    prob = cp.Problem(
+        cp.Minimize(eps), [A @ x + b + eps == 0, Ak @ x + bk <= 0, eps >= 0]
+    )
+    solve_linear_problem(prob)
+    if prob.status not in ["infeasible", "infeasible_inaccurate"]:
+        slacks[k] = eps.value
+        if eps.value < 1.0e-6:
+            touching[k] = True
     return slacks
 
 
